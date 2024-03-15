@@ -6,6 +6,12 @@ import os
 import numpy as np
 from affichage import print_decorative_header, print_blank_line
 import re
+from bokeh.plotting import figure, show, output_file
+from bokeh.models import Circle, MultiLine, HoverTool, TapTool, BoxZoomTool, ResetTool
+from bokeh.models.graphs import NodesAndLinkedEdges, EdgesAndLinkedNodes
+from bokeh.layouts import layout
+from bokeh.models import GraphRenderer, StaticLayoutProvider, LabelSet, ColumnDataSource
+from bokeh.palettes import Spectral8
 import networkx as nx
 
 class SystemNode:
@@ -306,6 +312,9 @@ class SystemTree:
             # Print the merit function of the optimized system
             print(f"Node {node.id} Optimized: Merit Function: {node.merit_function}, Saved at: {optimized_file_path}")
 
+        #self.plot_optimization_tree()
+        return final_depth_nodes 
+
 
     def find_final_depth(self):
         """
@@ -390,7 +399,6 @@ class SystemTree:
         if not optimized_systems_data:
             print("No optimized systems available at the final depth.")
 
-
     def get_final_optimized_systems_data(self):
     
     #Collect and return a list of dictionaries of all final optimized systems, sorted by their merit function values.
@@ -409,6 +417,7 @@ class SystemTree:
             optimized_systems_data.append({
                 'Node ID': node.id,
                 'Parent ID': parent_id,
+                'Optical System State': node.optical_system_state,
                 'Merit Function': merit_function if merit_function != float('inf') else "No merit function",
                 'EFL': node.efl,
                 'SEQ File Path': node.seq_file_path
@@ -423,6 +432,7 @@ class SystemTree:
         return optimized_systems_data
 
     
+    # Just keep the best nodes at a given depth
     # Just keep the best nodes at a given depth
         
     def keep_best_nodes(self, depth, max_nodes=10):
@@ -456,62 +466,134 @@ class SystemTree:
 
 
     def plot_optimization_tree(self):
+        # Générer le graphe NetworkX à partir de l'arbre d'optimisation
         G = nx.DiGraph()
+        for node in self.all_nodes:
+            G.add_node(node.id, depth=node.depth, merit=node.merit_function if node.merit_function else "N/A")
+            if node.parent:
+                G.add_edge(node.parent.id, node.id)
+        
+        # Calculer la disposition du graphe
+        pos = self.hierarchical_layout(G, self.root.id)
+        
+        # Préparer les données pour Bokeh
+        xs, ys = [], []
+        colors = []
+        for edge_start, edge_end in G.edges():
+            start_x, start_y = pos[edge_start]
+            end_x, end_y = pos[edge_end]
+            
+            xs.append([start_x, end_x])
+            ys.append([start_y, end_y])
+        
+        for node in G.nodes():
+            node_depth = G.nodes[node]['depth']
+            colors.append(self.depth_color(node_depth))  # Assigner une couleur basée sur la profondeur
+        
+        node_indices = list(G.nodes())
+        
+        # Créer le ColumnDataSource
+        source_edges = ColumnDataSource(data=dict(xs=xs, ys=ys))
+        source_nodes = ColumnDataSource(data=dict(x=list(pos[node][0] for node in node_indices), 
+                                                   y=list(pos[node][1] for node in node_indices), 
+                                                   color=colors))
+        
+        # Créer la figure
+        plot = figure(title="Optimization Tree", x_axis_label='X', y_axis_label='Y', tools="", toolbar_location=None)
+        plot.multi_line('xs', 'ys', source=source_edges, color='gray')
+        plot.circle('x', 'y', size=15, source=source_nodes, color='color', legend_field='color')
+        
+        # Ajouter l'outil de survol
+        hover = HoverTool()
+        hover.tooltips = [("ID", "@index"), ("Merit", "@merit")]
+        plot.add_tools(hover)
+        
+        show(plot)  # Afficher le graphe
+        
+    def hierarchical_layout(self, G, root):
+        """
+        Calcul simple d'une mise en page hiérarchique pour les arbres.
+        """
         pos = {}
-        labels = {}
-        node_sizes = []
-        node_colors_dict = {}
-        level_widths = {}
-
-        max_depth = max(node.depth for node in self.all_nodes)  # Find the max depth for scaling
-
-        # Function to adjust sizes and positions based on depth
-        # As depth increases, size factor decreases
-        def size_and_depth_factor(depth):
-            # Invert the depth factor to make the size smaller as depth increases
-            return max(1, (max_depth - depth + 1) / max_depth)
-
-        # Initialize BFS
-        queue = [(self.root, None, 0, 0)]
+        levels = self.get_levels(G, root)
+        width = max(len(levels[level]) for level in levels)
+        
+        for level in levels:
+            dx = 1.0 / (len(levels[level]) + 1)
+            for i, node in enumerate(levels[level]):
+                pos[node] = ((i + 1) * dx * width, -level)
+        
+        return pos
+    
+    def get_levels(self, G, root):
+        """
+        Attribue à chaque nœud un niveau de profondeur dans l'arbre.
+        """
+        levels = {}
+        queue = [(root, 0)]
         while queue:
-            node, parent, depth, position = queue.pop(0)
-            G.add_node(node.id)
-            if parent:
-                G.add_edge(parent.id, node.id)
+            node, level = queue.pop(0)
+            if level not in levels:
+                levels[level] = []
+            levels[level].append(node)
+            for child in G.successors(node):
+                queue.append((child, level + 1))
+        return levels
+            
+    def depth_color(self, depth):
+        # Retourner une couleur basée sur la profondeur
+        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+        return colors[depth % len(colors)]
 
-            if depth not in level_widths:
-                level_widths[depth] = 0
-            else:
-                level_widths[depth] += 1
 
-            x_position = level_widths[depth] * (1.5 * size_and_depth_factor(depth))
-            pos[node.id] = (x_position, -np.sqrt(depth))
+    def plot_optimization_tree2(self):
+            output_file("nom_du_fichier.html")
+            G = nx.DiGraph()
+            # Construction du graphe NetworkX à partir de self.all_nodes
+            for node in self.all_nodes:
+                G.add_node(node.id, merit=str(node.merit_function) if node.merit_function else "No merit", depth=str(node.depth))
+                if node.parent:
+                    G.add_edge(node.parent.id, node.id)
 
-            merit_label = f'{node.id}\n{node.merit_function:.2f}' if node.merit_function else f'{node.id}\nNo merit'
-            labels[node.id] = merit_label
+            # Calcul du layout
+            pos = nx.spring_layout(G, scale=2)
 
-            color_value = np.log1p(node.merit_function) if node.merit_function else 0
-            node_colors_dict[node.id] = color_value
+            # Création des sources de données pour Bokeh
+            node_source = ColumnDataSource({'x': [pos[node][0] for node in G.nodes],
+                                            'y': [pos[node][1] for node in G.nodes],
+                                            'merit': [G.nodes[node]['merit'] for node in G.nodes],
+                                            'depth': [G.nodes[node]['depth'] for node in G.nodes]})
+            
+            edge_source = ColumnDataSource({'xs': [[pos[edge[0]][0], pos[edge[1]][0]] for edge in G.edges],
+                                            'ys': [[pos[edge[0]][1], pos[edge[1]][1]] for edge in G.edges]})
 
-            node_sizes.append(3000 * size_and_depth_factor(depth))  # Calculate size based on adjusted factor
+            # Supposons que 'pos' est le dictionnaire des positions des nœuds retourné par nx.spring_layout ou une autre fonction de mise en page
+            x_values, y_values = zip(*pos.values())  # décompresse les valeurs x et y dans des listes séparées
 
-            for i, child in enumerate(node.children):
-                queue.append((child, node, depth + 1, i))
+            # Calculez les limites minimales et maximales avec une certaine marge
+            x_margin, y_margin = 0.1, 0.1  # par exemple, 10% de marge
+            x_min, x_max = min(x_values) - x_margin, max(x_values) + x_margin
+            y_min, y_max = min(y_values) - y_margin, max(y_values) + y_margin
 
-        cmap = plt.cm.rainbow
+            # Créez la figure avec les plages calculées
+            plot = figure(title="Optimization Tree with Bokeh", x_range=(x_min, x_max), y_range=(y_min, y_max), tools=[BoxZoomTool(), ResetTool(), TapTool()])
 
-        color_values = [node_colors_dict[n] for n in G.nodes()]
 
-        fig, ax = plt.subplots(figsize=(20, 10))
-        nx.draw(G, pos, ax=ax, labels=labels, with_labels=True, node_color=color_values,
-                node_size=node_sizes, font_size=8 * size_and_depth_factor(depth), cmap=cmap,
-                arrows=True, edge_color='gray')
+            # Dessin des arêtes
+            plot.add_glyph(edge_source, MultiLine(xs='xs', ys='ys', line_color="#CCCCCC"))
 
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=min(color_values), vmax=max(color_values)))
-        sm.set_array([])
-        cbar = fig.colorbar(sm, ax=ax, label='Log of Merit Function Value')
-        ax.set_title("Optimization Tree Visualization")
-        plt.show()
+            # Dessin des nœuds
+            node_renderer = plot.add_glyph(node_source, Circle(size=15, fill_color='skyblue'))
+
+            # Ajout des étiquettes aux nœuds
+            labels = LabelSet(x='x', y='y', text='merit', source=node_source, background_fill_color='white', text_align='center', y_offset=10)
+            plot.add_layout(labels)
+
+            # Configuration des outils interactifs
+            hover = HoverTool(tooltips=[("Merit", "@merit"), ("Depth", "@depth")], renderers=[node_renderer])
+            plot.add_tools(hover)
+
+            show(plot)
 
 
     def plot_best_merit_function_evolution(self):

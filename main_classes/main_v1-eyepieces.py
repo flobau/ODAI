@@ -1,12 +1,18 @@
 from OpticalSystemManager_eyepieces import OpticalSystemManager_eyepieces
+from SystemSetup_module import SystemSetup
 import tkinter as tk
 from tkinter import ttk
 import tkinter.scrolledtext as scrolledtext
 import sys
 import threading
 import pythoncom
+import os
 
 data_from_ui = None
+optical_system_manager = OpticalSystemManager_eyepieces()
+final_data=None
+
+
 
 class PrintLogger:  # create file like object
     def __init__(self, textbox):  # pass reference to text widget
@@ -99,12 +105,25 @@ def submit():
 
 def start_optimization_thread(data):
     def manage_optical_system():
+        global final_data
+        global optical_system_manager
         pythoncom.CoInitialize()  # Initialise COM pour ce thread
         try:
-            optical_system_manager = OpticalSystemManager_eyepieces()
             optical_system_manager.update_parameters_from_ui(data)  # Met à jour les paramètres avec les données de l'UI
             optical_system_manager.start_system()
             final_data=optical_system_manager.evolve_and_optimize()
+            print(final_data)
+            for node in final_data:
+                    print('flag1')
+                    system = SystemSetup()
+                    print('flag2')
+                    print(node['Optical System State'])
+                    system.load_system_parameters(node['Optical System State'])
+                    print('flag3')
+                    system.get_mtf(True,data['base_file_path']+'/figures',node['SEQ File Path']+'.png')
+                    print('flag4')
+                    #system.get_spot_diagram_and_field_angles(True)
+                    #system.represent_spot_diameter()
             optical_system_manager.end_system()
             print("Session CodeV terminée.")
             # Utilise `root.after` pour planifier l'affichage des données dans l'UI sur le thread principal
@@ -119,6 +138,7 @@ def start_optimization_thread(data):
                 system_data['Node ID'], system_data['Parent ID'], system_data['Merit Function'],
                 system_data['EFL'], system_data['SEQ File Path']
             ))
+        update_seq_files_combobox()
    
     # Création et démarrage du thread
     thread = threading.Thread(target=manage_optical_system)
@@ -135,6 +155,28 @@ def redirect_logging():
 def reset_logging():
     sys.stdout = sys.__stdout__
     sys.stderr = sys.__stderr__
+    
+
+def update_seq_files_combobox():
+    # Extraire tous les chemins des fichiers .seq de la dernière colonne du TreeView
+    seq_files = [tree.item(row)['values'][-1] for row in tree.get_children()]
+    # Mettre à jour le combobox avec les noms de ces fichiers
+    seq_combobox['values'] = seq_files
+    if seq_files:
+        seq_combobox.current(0)  # Sélectionnez le premier fichier par défaut, si la liste n'est pas vide
+
+
+def open_selected_seq_file():
+    selected_file_path = seq_combobox.get()
+    if selected_file_path:
+        try:
+            os.startfile(selected_file_path)
+        except Exception as e:
+            print(f"Error opening file : {e}")
+    else:
+        print("No files selected")
+
+
 
 if __name__ == "__main__":
     # Create the main window
@@ -291,7 +333,18 @@ if __name__ == "__main__":
        
 
     tree.pack(expand=True, fill="both")
+    
+    # Créez un frame pour le combobox et le placez-le sous le treeview
+    seq_combobox_frame = ttk.Frame(output_frame)
+    seq_combobox_frame.pack(fill='x', expand=False, padx=10, pady=5)
 
+    # Créez le combobox pour sélectionner un fichier .seq
+    seq_combobox = ttk.Combobox(seq_combobox_frame, state="readonly", width=50)
+    seq_combobox.pack(side=tk.LEFT, padx=5, pady=5)
+
+    # Vous pouvez ajouter un bouton à côté du combobox si nécessaire, par exemple, pour ouvrir le fichier .seq sélectionné
+    open_seq_file_button = ttk.Button(seq_combobox_frame, text="Ouvrir", command=open_selected_seq_file)
+    open_seq_file_button.pack(side=tk.LEFT, padx=5)
 
     # Submit button
     submit_button = ttk.Button(root, text="Submit", command=submit)
@@ -339,6 +392,6 @@ if __name__ == "__main__":
     surface2_radius_entry.insert(0, "-391.44174")
     surface2_thickness_entry.insert(0, "97.703035")
 
-    redirect_logging()
-    # Run the GUI
+    #redirect_logging()
+    #Run the GUI
     root.mainloop()

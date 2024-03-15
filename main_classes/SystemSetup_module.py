@@ -6,6 +6,8 @@ import win32com.client
 from SystemNode_module import SystemNode, SystemTree
 from affichage import *
 import copy
+import os
+
 
 class SystemSetup:
       def __init__(self):
@@ -769,7 +771,7 @@ class SystemSetup:
                 k_rms,k_spot=k_rms2,k_spot2
               
       
-      def get_mtf(self,affichage = False):
+      def get_mtf(self,affichage = False, dossier = None,nom_fichier = None):
         self.cv.Command("MTF; CAN;")
         self.cv.Command("MTF")
         self.cv.Command("GEO NO;")
@@ -896,7 +898,13 @@ class SystemSetup:
                       loc='bottom', bbox=[0.0, -0.5, 1.0, 0.3])
 
             plt.subplots_adjust(left=0.2, bottom=0.4)  # Ajuster l'espace pour le tableau
-            plt.show()
+            
+            chemin_complet = os.path.join(dossier, nom_fichier)
+            os.makedirs(dossier, exist_ok=True)
+            plt.savefig(chemin_complet)
+            plt.close()
+
+
                 
         return focal_lengths, f_numbers, datas, wavelengths, field_angles
 
