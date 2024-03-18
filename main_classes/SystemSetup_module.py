@@ -516,8 +516,8 @@ class SystemSetup:
         print(spot_diameter)
         plt.plot([spot_data[0] for spot_data in self.spot], spot_diameter, 'ro')
         
-        plt.xlabel('Field Height')
-        plt.ylabel('Spot Diameter')
+        plt.xlabel('Field Height (deg)')
+        plt.ylabel('Spot Diameter (mm)')
         plt.title('Spot Diameter vs Field Height')
         plt.grid(True)
 

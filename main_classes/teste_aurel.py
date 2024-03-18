@@ -1,5 +1,5 @@
 from OpticalSystemManager_eyepieces import OpticalSystemManager_eyepieces
-from SystemNode_module_Aurel import SystemSetup
+from SystemSetup_module import SystemSetup
 import tkinter as tk
 from tkinter import ttk
 import tkinter.scrolledtext as scrolledtext

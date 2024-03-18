@@ -11,7 +11,7 @@ import os
 data_from_ui = None
 optical_system_manager = OpticalSystemManager_eyepieces()
 final_data=None
-
+file_path=None
 
 
 class PrintLogger:  # create file like object
@@ -107,6 +107,7 @@ def start_optimization_thread(data):
     def manage_optical_system():
         global final_data
         global optical_system_manager
+        global file_path
         pythoncom.CoInitialize()  # Initialise COM pour ce thread
         try:
             optical_system_manager.update_parameters_from_ui(data)  # Met à jour les paramètres avec les données de l'UI
