@@ -6,8 +6,6 @@ import win32com.client
 from SystemNode_module import SystemNode, SystemTree
 from affichage import *
 import copy
-import os
-
 
 class SystemSetup:
       def __init__(self):
@@ -17,6 +15,12 @@ class SystemSetup:
           self.saved_systems = {}  # dict to keep track of saved systems
           self.rms = []
           self.spot = []
+          
+      def load_seq_file(self, seq_file_path):
+          """Charge un fichier .seq dans CODE V."""
+          load_command = f'run "{seq_file_path}"; GO'
+          self.cv.Command(load_command)
+          print(f"Loaded .seq file: {seq_file_path}")
 
       class Surface:
           def __init__(self, parent, number, radius, thickness, material=None):
@@ -509,7 +513,7 @@ class SystemSetup:
             }
         return saved_params
 
-      def represent_spot_diameter(self, dossier = None,nom_fichier = None):
+      def represent_spot_diameter(self):
         #print(self.rms)
         print(self.spot)
         spot_diameter = [float(diameter[-1]) for diameter in self.spot]
@@ -521,10 +525,7 @@ class SystemSetup:
         plt.title('Spot Diameter vs Field Height')
         plt.grid(True)
 
-        dossier = dossier+'/Spot_Diameter'
-        os.makedirs(dossier, exist_ok=True)
-        plt.savefig(dossier+'/'+ nom_fichier+'_Spot_Diameter.png')  # Enregistrez le graphique en tant qu'image
-        plt.close()
+        plt.show()
 
       def load_system_parameters(self, saved_params):
         self.clear_system()  # Clear the current system
@@ -628,7 +629,7 @@ class SystemSetup:
 
             print("-" * 30)  # Separator for better readability
 
-      def get_spot_diagram_and_field_angles(self, affichage = False, dossier = None,nom_fichier = None):
+      def get_spot_diagram_and_field_angles(self, affichage = False):
 
               def extract_text(texte,mot_cle,bool):
                 if bool :
@@ -709,7 +710,7 @@ class SystemSetup:
                 field_angles = [(float(m[0]), float(m[1])) for m in matches]
                 return field_angles
 
-              def plot_combined_data(datas, dossier = None,nom_fichier = None):
+              def plot_combined_data(datas):
                   num_plots = len(datas)
                   # Pour chaque graphe, une ligne. Pas de colonne supplémentaire car on veut un layout vertical
                   num_rows = num_plots
@@ -741,10 +742,7 @@ class SystemSetup:
                       ax.grid(True)
                   
                   plt.tight_layout()
-                  dossier = dossier+'/Spot_Diagram'
-                  os.makedirs(dossier, exist_ok=True)
-                  plt.savefig(dossier+'/'+ nom_fichier+'_Spot_Diagram.png')  # Enregistrez le graphique en tant qu'image
-                  plt.close()
+                  plt.show()
               
               
 
@@ -768,7 +766,7 @@ class SystemSetup:
                   data.append(data_degrees)
               extracted_data = [extract_data(datas) for datas in data]
               if affichage:
-                plot_combined_data(extracted_data,dossier,nom_fichier)
+                plot_combined_data(extracted_data)
                 
               k_rms=0
               k_spot=0
@@ -776,8 +774,8 @@ class SystemSetup:
                 (k_rms2,k_spot2)=extract_values(texts,field_angles,k_rms,k_spot)
                 k_rms,k_spot=k_rms2,k_spot2
               
-      
-      def get_mtf(self,affichage = False, dossier = None,nom_fichier = None):
+     
+      def get_mtf(self,affichage = False):
         self.cv.Command("MTF; CAN;")
         self.cv.Command("MTF")
         self.cv.Command("GEO NO;")
@@ -904,13 +902,7 @@ class SystemSetup:
                       loc='bottom', bbox=[0.0, -0.5, 1.0, 0.3])
 
             plt.subplots_adjust(left=0.2, bottom=0.4)  # Ajuster l'espace pour le tableau
-
-            dossier = dossier+'/MTF'
-            os.makedirs(dossier, exist_ok=True)
-            plt.savefig(dossier+'/'+ nom_fichier+'_MTF.png')  # Enregistrez le graphique en tant qu'image
-            plt.close()
-
-
+            plt.show()
                 
         return focal_lengths, f_numbers, datas, wavelengths, field_angles
 
@@ -1219,12 +1211,11 @@ class SystemSetup:
 
 
       def perform_sp_scan(self, reference_surface_number, efl, delta_curvature=0.00025, num_points=400, threshold_multiplier=3, debug=False):
-        # Nested function to evaluate the derivative at a given curvature
+        
         def derivative_at_curvature(curvature, curvatures, derivatives):
             index = np.searchsorted(curvatures, curvature) - 1
             return derivatives[index]
 
-        # Nested function for the bisection method
         def bisection_method(f, a, b, tol=1e-5, max_iter=100):
             for _ in range(max_iter):
                 mid = (a + b) / 2
@@ -1236,71 +1227,63 @@ class SystemSetup:
                     break
             return (a + b) / 2
 
-        # Nested function to check if the zero at the given index is smooth
         def is_smooth_zero(derivatives, index, window_size=5):
             start = max(index - window_size, 0)
             end = min(index + window_size, len(derivatives))
             window = derivatives[start:end]
-            return np.std(window) < threshold  # using the same threshold as before
+            return np.std(window) < threshold
 
-
-        # FAUT UPDATE SUR CODEV !!!!!!
-
-        # Define initial curvature based on the reference surface
         initial_curvature = 1 / self.get_surface(reference_surface_number).radius
-        # Print initial curvature
         print(f"Initial Curvature: {initial_curvature}")
 
-        # Arrays to store curvatures and corresponding MF values
         curvatures = np.linspace(initial_curvature - delta_curvature * num_points / 2, 
-                                 initial_curvature + delta_curvature * num_points / 2, 
-                                 num_points)
+                                initial_curvature + delta_curvature * num_points / 2, 
+                                num_points)
         mf_values = np.zeros(num_points)
 
-        # Compute the derivative for each curvature using the central finite difference method
         for i, curvature in enumerate(curvatures):
             self.get_surface(reference_surface_number + 1).set_curvature(curvature)
             mf = self.error_fct(efl, constrained=False)
             mf_values[i] = mf
 
-        # Compute the derivative using the central finite difference method
         derivatives = np.zeros(num_points)
         for i in range(1, num_points - 1):
             derivatives[i] = (mf_values[i + 1] - mf_values[i - 1]) / (2 * delta_curvature)
 
-        # Compute the standard deviation of the derivative values
         std_deviation = np.std(derivatives)
-
-        # Set the threshold as a multiple of the standard deviation
         threshold = threshold_multiplier * std_deviation
 
-        # Filter the data to focus on the region near zero
         mask = np.abs(derivatives) < threshold
         filtered_curvatures = curvatures[mask]
         filtered_derivatives = derivatives[mask]
 
-        # Finding all intervals where the derivative changes sign and is smooth
         zero_points = []
-        for i in range(1, len(curvatures) - 1):
-            if derivatives[i] * derivatives[i - 1] < 0:
-                a, b = curvatures[i - 1], curvatures[i]
+        for i in range(1, len(filtered_curvatures) - 1):
+            if filtered_derivatives[i] * filtered_derivatives[i - 1] < 0:
+                a, b = filtered_curvatures[i - 1], filtered_curvatures[i]
                 zero_point = bisection_method(lambda x: derivative_at_curvature(x, curvatures, derivatives), a, b)
 
-                # Check if the zero point is smooth
-                if is_smooth_zero(derivatives, i):
+                if is_smooth_zero(filtered_derivatives, i):
                     zero_points.append(zero_point)
 
-        # If there is no zero point, return the starting point (same curvature)
-        if not zero_points:
-            zero_points.append(initial_curvature)
+        # Filter zero points that are too close to each other
+        tolerance = (curvatures[-1] - curvatures[0]) * 0.05
+        filtered_zero_points = []
+        for point in sorted(zero_points):
+            if not filtered_zero_points or abs(point - filtered_zero_points[-1]) > tolerance:
+                filtered_zero_points.append(point)
+            else:
+                print(f"Filtering applied: {point} is within 5% range of another zero point.")
+
+        if not filtered_zero_points:
+            filtered_zero_points.append(initial_curvature)
             print("SP scan doesn't return result, returning the starting point.")
 
         if debug:
-            print("debuging activated for perform_sp_scan, plotting the results")
-            # Plot the filtered derivative against curvature with the zero points marked
+            print("Debugging activated for perform_sp_scan, plotting the results")
             plt.plot(filtered_curvatures, filtered_derivatives, label="Filtered Derivative")
-            for zp in zero_points:
-                plt.scatter([zp], [0], color='red')  # Marking the zero points
+            for zp in filtered_zero_points:
+                plt.scatter([zp], [0], color='red')
             plt.xlabel("Curvature")
             plt.ylabel("Derivative of Merit Function")
             plt.title("Filtered Derivative of Merit Function vs Curvature with Zero Points")
@@ -1308,7 +1291,6 @@ class SystemSetup:
             plt.grid(True)
             plt.show()
 
-            # Plotting the merit function against curvature
             plt.plot(curvatures, mf_values)
             plt.xlabel("Curvature")
             plt.ylabel("Merit Function")
@@ -1316,7 +1298,8 @@ class SystemSetup:
             plt.grid(True)
             plt.show()
 
-        return zero_points
+        return filtered_zero_points
+
 
   
 

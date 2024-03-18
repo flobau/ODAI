@@ -115,15 +115,22 @@ def start_optimization_thread(data):
             print(final_data)
             for node in final_data:
                     print('flag1')
-                    system = SystemSetup()
+                    load_command=f'run "{node['SEQ File Path']}"; GO'
+                    optical_system_manager.optical_system.cv.Command(load_command)
+                    optical_system_manager.optical_system.update_all_surfaces_from_codev
                     print('flag2')
                     print(node['Optical System State'])
-                    system.load_system_parameters(node['Optical System State'])
+                    #system.load_system_parameters(node['Optical System State'])
                     print('flag3')
-                    system.get_mtf(True,data['base_file_path']+'/figures',node['SEQ File Path']+'.png')
+                    file_path=data['base_file_path']+'/figures'
+                    file_name = node['SEQ File Path'].split('/')
+                    file_name = file_name[-1].split('.')
+                    file_name = file_name[0]
+                    optical_system_manager.optical_system.get_mtf(True,file_path,file_name)
+                    optical_system_manager.optical_system.get_spot_diagram_and_field_angles(True,file_path,file_name)
+                    optical_system_manager.optical_system.represent_spot_diameter(file_path,file_name)
+
                     print('flag4')
-                    #system.get_spot_diagram_and_field_angles(True)
-                    #system.represent_spot_diameter()
             optical_system_manager.end_system()
             print("Session CodeV terminée.")
             # Utilise `root.after` pour planifier l'affichage des données dans l'UI sur le thread principal
@@ -392,6 +399,6 @@ if __name__ == "__main__":
     surface2_radius_entry.insert(0, "-391.44174")
     surface2_thickness_entry.insert(0, "97.703035")
 
-    #redirect_logging()
+    redirect_logging()
     #Run the GUI
     root.mainloop()
