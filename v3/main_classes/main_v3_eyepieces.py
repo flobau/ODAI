@@ -306,7 +306,6 @@ class OpticalSystemConfigInterface:
                 optical_system_manager.update_parameters_from_ui(data)  # Met à jour les paramètres avec les données de l'UI
                 optical_system_manager.start_system()
                 final_data=optical_system_manager.evolve_and_optimize()
-                print(final_data)
                 for node in final_data:
                         load_command=f'run "{node["SEQ File Path"]}"; GO'
                         optical_system_manager.optical_system.cv.Command(load_command)
